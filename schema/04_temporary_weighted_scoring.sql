@@ -4,7 +4,7 @@
 -- 0. Ensure clean temporary table
 -- =========================================
 
--- Try dropping the table (will error if it doesn't exist, safe to ignore)
+-- Dropping the table (will error if it doesn't exist, safe to ignore)
 
 DROP TEMPORARY TABLE temp_field_scores;
 
@@ -19,5 +19,5 @@ CREATE TEMPORARY TABLE temp_field_scores (
     entity_source_score DECIMAL(5,2)
 );
 
--- Optional: truncate if you are re-running in the same session
+-- Optional: truncate if re-running in the same session
 TRUNCATE TABLE temp_field_scores;
