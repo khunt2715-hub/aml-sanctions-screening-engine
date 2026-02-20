@@ -87,15 +87,16 @@ SELECT
     sm.run_id,
     sm.customer_id,
     sm.entity_id,
-    CONCAT(
-        CASE WHEN sm.weighted_name > 0 THEN CONCAT('Name(', sm.weighted_name, '); ') ELSE '' END,
-        CASE WHEN sm.weighted_dob > 0 THEN CONCAT('DOB(', sm.weighted_dob, '); ') ELSE '' END,
-        CASE WHEN sm.weighted_nationality > 0 THEN CONCAT('Nationality(', sm.weighted_nationality, '); ') ELSE '' END,
-        CASE WHEN sm.weighted_pep > 0 THEN CONCAT('PEP(', sm.weighted_pep, '); ') ELSE '' END,
-        CASE WHEN sm.weighted_source > 0 THEN CONCAT('Entity Source(', sm.weighted_source, '); ') ELSE '' END
+    CONCAT_WS('; ',
+        IF(sm.weighted_name > 0, CONCAT('Name(', sm.weighted_name, ')'), NULL),
+        IF(sm.weighted_dob > 0, CONCAT('DOB(', sm.weighted_dob, ')'), NULL),
+        IF(sm.weighted_nationality > 0, CONCAT('Nationality(', sm.weighted_nationality, ')'), NULL),
+        IF(sm.weighted_pep > 0, CONCAT('PEP(', sm.weighted_pep, ')'), NULL),
+        IF(sm.weighted_source > 0, CONCAT('Entity Source(', sm.weighted_source, ')'), NULL)
     ) AS explanation_text
 FROM screening_matches sm
 WHERE sm.run_id = @current_run_id;
+
 
 -- 5. Insert Weighted Matches
 
