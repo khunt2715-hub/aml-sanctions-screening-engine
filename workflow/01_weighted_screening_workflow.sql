@@ -1,8 +1,8 @@
--- ======================================
--- Weighted Sanctions Screening Workflow
--- ======================================
+-- =================================================
+-- Weighted Sanctions Screening Workflow with Alerts
+-- =================================================
 
--- 1. Create Screen Run
+-- 1. Create a new screening run
 
 INSERT INTO screening_runs (
     run_type,
@@ -15,7 +15,7 @@ VALUES (
     'RUNNING'
 );
 
--- 2. Capture Run ID
+-- 2. Capture the auto-generated Run ID
 
 SET @current_run_id = LAST_INSERT_ID();
 
@@ -75,6 +75,28 @@ SELECT
 FROM customers c
 CROSS JOIN sanctions_entities s;
 
+-- 5. Scoring Explanations - For Audit Purposes
+
+INSERT INTO match_explanations (
+    run_id,
+    customer_id,
+    entity_id,
+    explanation_text
+)
+SELECT
+    sm.run_id,
+    sm.customer_id,
+    sm.entity_id,
+    CONCAT(
+        CASE WHEN sm.weighted_name > 0 THEN CONCAT('Name(', sm.weighted_name, '); ') ELSE '' END,
+        CASE WHEN sm.weighted_dob > 0 THEN CONCAT('DOB(', sm.weighted_dob, '); ') ELSE '' END,
+        CASE WHEN sm.weighted_nationality > 0 THEN CONCAT('Nationality(', sm.weighted_nationality, '); ') ELSE '' END,
+        CASE WHEN sm.weighted_pep > 0 THEN CONCAT('PEP(', sm.weighted_pep, '); ') ELSE '' END,
+        CASE WHEN sm.weighted_source > 0 THEN CONCAT('Entity Source(', sm.weighted_source, '); ') ELSE '' END
+    ) AS explanation_text
+FROM screening_matches sm
+WHERE sm.run_id = @current_run_id;
+
 -- 5. Insert Weighted Matches
 
 INSERT INTO screening_matches (
@@ -105,7 +127,7 @@ SELECT
         fs.entity_source_score * w_src.weight
     ),
     'PENDING',
-    1
+    @current_run_id
 FROM temp_field_scores fs
 JOIN screening_weights w_name  ON w_name.field_name = 'name'
 JOIN screening_weights w_dob   ON w_dob.field_name  = 'dob'
@@ -118,10 +140,42 @@ WHERE (
     OR fs.nationality_score > 0
 );
 
+-- 6. Assign risk levels based on total_score thresholds
+
+UPDATE screening_matches
+SET risk_level = CASE
+	WHEN total_score >=50 THEN 'HIGH_RISK'
+    WHEN total_score >=30 THEN 'MEDIUM_RISK'
+    ELSE 'LOW_RISK'
+END
+WHERE run_id = @current_run_id;
+
+-- 7. Generate Alerts for HIGH_RISK Matches in the Alerts Table
+
+INSERT INTO alerts (run_id, customer_id, entity_id, risk_level)
+SELECT run_id, customer_id, entity_id, risk_level
+FROM screening_matches sm
+WHERE run_id = @current_run_id
+AND risk_level = 'HIGH_RISK'
+AND NOT EXISTS (
+    SELECT 1
+    FROM alerts a
+    WHERE a.run_id = sm.run_id
+      AND a.customer_id = sm.customer_id
+      AND a.entity_id = sm.entity_id
+);
+
+-- 8. Mark alert_generated flag in screening_matches
+
+UPDATE screening_matches
+SET alert_generated = TRUE
+WHERE run_id = @current_run_id
+AND risk_level = 'HIGH_RISK';
+
 -- 6. Mark Run Complete
 
 UPDATE screening_runs
 SET
     status = 'COMPLETED',
     completed_at = NOW()
-WHERE run_id = 1;
+WHERE run_id = @current_run_id;
